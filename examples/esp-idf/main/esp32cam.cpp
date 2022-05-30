@@ -11,14 +11,31 @@
 //Run `idf.py menuconfig` and set various other options ing "ESP32CAM Configuration"
 
 //common camera settings, see below for other camera options
-#define CAM_FRAMESIZE FRAMESIZE_VGA //enough resolution for a simple security cam
+#ifdef CONFIG_FRAMESIZE_QVGA
+#define CAM_FRAMESIZE FRAMESIZE_QVGA
+#endif
+#ifdef CONFIG_FRAMESIZE_CIF
+#define CAM_FRAMESIZE FRAMESIZE_CIF
+#endif
+#ifdef CONFIG_FRAMESIZE_VGA
+#define CAM_FRAMESIZE FRAMESIZE_VGA
+#endif
+#ifdef CONFIG_FRAMESIZE_SVGA
+#define CAM_FRAMESIZE FRAMESIZE_SVGA
+#endif
+#ifdef CONFIG_FRAMESIZE_XGA
+#define CAM_FRAMESIZE FRAMESIZE_XGA
+#endif
+#ifdef CONFIG_FRAMESIZE_SXGA
+#define CAM_FRAMESIZE FRAMESIZE_SXGA
+#endif
+#ifdef CONFIG_FRAMESIZE_UXGA
+#define CAM_FRAMESIZE FRAMESIZE_UXGA
+#endif
+
 #define CAM_QUALITY 12 //0 to 63, with higher being lower-quality (and less bandwidth), 12 seems reasonable
 
 //MQTT settings
-#define MQTT_SERVER "192.168.1.163"   //DNS resolving on EPS32 might be broken "homeassistant.localdomain"
-#define MQTT_PORT 1883
-#define MQTT_USER "mqtt"
-#define MQTT_PASS "mqtt"
 #define MQTT_CLIENT_NAME CONFIG_LWIP_LOCAL_HOSTNAME //menuconfig->Component config->LWIP->Local netif hostname
 #define MQTT_LED_TOPIC "devices/" MQTT_CLIENT_NAME "/set/led"
 #define MQTT_WILL_TOPIC "devices/" MQTT_CLIENT_NAME "/connected"
@@ -111,8 +128,12 @@ void rtsp_server(void)
     //s->set_wpc(s, 1);            // 0 = disable , 1 = enable
     //s->set_raw_gma(s, 1);        // 0 = disable , 1 = enable
     //s->set_lenc(s, 1);           // 0 = disable , 1 = enable
-    s->set_hmirror(s, CONFIG_CAM_HORIZONTAL_MIRROR); // 0 = disable , 1 = enable
-    s->set_vflip(s, CONFIG_CAM_VERTICAL_FLIP);       // 0 = disable , 1 = enable
+    #ifdef CONFIG_CAM_HORIZONTAL_MIRROR
+        s->set_hmirror(s, 1);
+    #endif
+    #ifdef CONFIG_CAM_VERTICAL_FLIP
+        s->set_vflip(s, 1);
+    #endif
     //s->set_dcw(s, 1);            // 0 = disable , 1 = enable
     //s->set_colorbar(s, 0);       // 0 = disable , 1 = enable
 
@@ -138,7 +159,7 @@ void rtsp_server(void)
         printf("listen failed! errno=%d\n", errno);
     }
 
-    printf("\n\nrtsp://%s.localdomain:8554/mjpeg/1\n\n", CONFIG_LWIP_LOCAL_HOSTNAME);
+    printf("\n\nrtsp://%s:8554/mjpeg/1\n\n", CONFIG_LWIP_LOCAL_HOSTNAME);
 
     // loop forever to accept client connections
     while (true)
@@ -170,14 +191,21 @@ void null_terminate_string(char * data, int data_len, char * normal_string, int 
 void simple_ota_update(char * url)
 {
     ESP_LOGI("OTA", "Starting OTA update...");
-    esp_http_client_config_t config;
-    memset(&config, 0, sizeof(esp_http_client_config_t));
-    config.url = url;
-    config.cert_pem = (char *)server_cert_pem_start; //TODO https not working?
-    config.keep_alive_enable = true;
-    config.skip_cert_common_name_check = true;
+    esp_http_client_config_t http_config;
+    memset(&http_config, 0, sizeof(http_config));
+    http_config.url = url;
+    http_config.cert_pem = (char *)server_cert_pem_start; //TODO https not working?
+    http_config.keep_alive_enable = true;
+    http_config.skip_cert_common_name_check = true;
+    esp_https_ota_config_t ota_config = {
+        .http_config = &http_config,
+        .http_client_init_cb = NULL,
+        .bulk_flash_erase = false,
+        .partial_http_download = false,
+        .max_http_request_size = 0
+    };
 
-    esp_err_t ret = esp_https_ota(&config);
+    esp_err_t ret = esp_https_ota(&ota_config);
     if (ret != ESP_OK)
     {
         ESP_LOGE("OTA", "Firmware upgrade failed!");
@@ -266,10 +294,7 @@ void mqtt_app_start(void)
 {
     esp_mqtt_client_config_t mqtt_cfg;
     memset(&mqtt_cfg, 0, sizeof(esp_mqtt_client_config_t));
-    mqtt_cfg.host = MQTT_SERVER;
-    mqtt_cfg.port = MQTT_PORT;
-    mqtt_cfg.username = MQTT_USER;
-    mqtt_cfg.password = MQTT_PASS;
+    mqtt_cfg.uri = CONFIG_MQTT_URL;
     mqtt_cfg.client_id = MQTT_CLIENT_NAME;
     mqtt_cfg.lwt_topic = MQTT_WILL_TOPIC;
     mqtt_cfg.lwt_msg = MQTT_WILL_MSG;

@@ -29,4 +29,35 @@ menu "ESP32CAM Configuration"
         default 4
         help
             Frames per second the camera should run at.
+
+    config MQTT_URL
+        string "MQTT broker URL"
+        default "mqtt://mqtt.lan"
+
+    choice
+        prompt "CAM frame size"
+        default FRAMESIZE_VGA
+
+        config FRAMESIZE_QVGA
+            bool "QVGA (320x240)"
+
+        config FRAMESIZE_CIF
+            bool "CIF (400x296 subsampled)"
+
+        config FRAMESIZE_VGA
+            bool "VGA (640x480)"
+
+        config FRAMESIZE_SVGA
+            bool "SVGA (800x600 subsampled)"
+
+        config FRAMESIZE_XGA
+            bool "XGA (1024x768)"
+
+        config FRAMESIZE_SXGA
+            bool "SXGA (1280x1024)"
+
+        config FRAMESIZE_UXGA
+            bool "UXGA (1600x1200)"
+
+    endchoice
 endmenu
