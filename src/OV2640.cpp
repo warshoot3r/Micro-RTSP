@@ -35,7 +35,8 @@ camera_config_t esp32cam_config{
     .frame_size = FRAMESIZE_SVGA,
     .jpeg_quality = 12, //0-63 lower numbers are higher quality
     .fb_count = 2,      // if more than one i2s runs in continous mode.  Use only with jpeg
-#ifndef(ARDUINO_ARCH_ESP32)
+    .fb_location = CAMERA_FB_IN_PSRAM,
+#ifndef ARDUINO_ARCH_ESP32
     .grab_mode = CAMERA_GRAB_WHEN_EMPTY
 #endif
 };
@@ -73,7 +74,8 @@ camera_config_t esp32cam_aithinker_config{
     .frame_size = FRAMESIZE_VGA,
     .jpeg_quality = 12, //0-63 lower numbers are higher quality
     .fb_count = 2,      // if more than one i2s runs in continous mode.  Use only with jpeg
-#ifndef(ARDUINO_ARCH_ESP32)
+    .fb_location = CAMERA_FB_IN_PSRAM,
+#ifndef ARDUINO_ARCH_ESP32
     .grab_mode = CAMERA_GRAB_WHEN_EMPTY
 #endif
 };
@@ -106,7 +108,8 @@ camera_config_t esp32cam_ttgo_t_config{
     .frame_size = FRAMESIZE_SVGA,
     .jpeg_quality = 12, //0-63 lower numbers are higher quality
     .fb_count = 2,      // if more than one i2s runs in continous mode.  Use only with jpeg
-#ifndef(ARDUINO_ARCH_ESP32)
+    .fb_location = CAMERA_FB_IN_PSRAM,
+#ifndef ARDUINO_ARCH_ESP32
     .grab_mode = CAMERA_GRAB_WHEN_EMPTY
 #endif
 };
