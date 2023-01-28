@@ -12,6 +12,12 @@ menu "ESP32CAM Configuration"
         help
             WiFi password (WPA or WPA2) for the ESP32CAM to use.
 
+    config SINGLE_CLIENT_MODE
+        bool "Single Client Mode"
+        default y
+        help
+            If enabled the ESP32CAM will reset when a client disconnects. This will allow the ESP32CAM recover if it crashes or has network issues.
+
     config CAM_VERTICAL_FLIP
         bool "Vertical flip"
         default y
@@ -30,12 +36,12 @@ menu "ESP32CAM Configuration"
         help
             Frames per second the camera should run at.
 
-    config MQTT_URL
-        string "MQTT broker URL"
+    config MQTT_URI
+        string "MQTT broker URI"
         default "mqtt://mqtt.lan"
 
     choice
-        prompt "CAM frame size"
+        prompt "Camera frame size"
         default FRAMESIZE_VGA
 
         config FRAMESIZE_QVGA
@@ -58,6 +64,5 @@ menu "ESP32CAM Configuration"
 
         config FRAMESIZE_UXGA
             bool "UXGA (1600x1200)"
-
     endchoice
 endmenu

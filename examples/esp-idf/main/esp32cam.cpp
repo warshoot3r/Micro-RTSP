@@ -7,10 +7,8 @@
 #include "esp_ota_ops.h"
 #include "esp_http_client.h"
 #include "esp_https_ota.h"
+#include "esp_task_wdt.h"
 
-//Run `idf.py menuconfig` and set various other options ing "ESP32CAM Configuration"
-
-//common camera settings, see below for other camera options
 #ifdef CONFIG_FRAMESIZE_QVGA
 #define CAM_FRAMESIZE FRAMESIZE_QVGA
 #endif
@@ -33,6 +31,9 @@
 #define CAM_FRAMESIZE FRAMESIZE_UXGA
 #endif
 
+//Run `idf.py menuconfig` and set various other options in "ESP32CAM Configuration"
+
+//common camera settings, see below for other camera options
 #define CAM_QUALITY 12 //0 to 63, with higher being lower-quality (and less bandwidth), 12 seems reasonable
 
 //MQTT settings
@@ -63,6 +64,8 @@ void delay(uint32_t ms)
 
 void client_worker(void * client)
 {
+    esp_task_wdt_add(NULL);
+
     OV2640Streamer * streamer = new OV2640Streamer((SOCKET)client, cam);
     CRtspSession * session = new CRtspSession((SOCKET)client, streamer);
 
@@ -84,12 +87,18 @@ void client_worker(void * client)
             //let the system do something else for a bit
             vTaskDelay(1);
         }
+        esp_task_wdt_reset();
     }
 
+#ifdef CONFIG_SINGLE_CLIENT_MODE
+    esp_restart();
+#else
     //shut ourselves down
     delete streamer;
     delete session;
+    esp_task_wdt_delete(NULL);
     vTaskDelete(NULL);
+#endif
 }
 
 extern "C" void rtsp_server(void);
@@ -102,14 +111,26 @@ void rtsp_server(void)
     socklen_t client_addr_len = sizeof(client_addr);
     TaskHandle_t xHandle = NULL;
 
+    //note that I am adding this task watchdog, but I never feed it
+    //if a client doesn't connect in 60 seconds, we reset
+    //I assume by that time that something is wrong with the wifi and reset will clear it up
+    //if a client connects, we'll delete this watchdog
+    esp_task_wdt_add(NULL);
+
     camera_config_t config = esp32cam_aithinker_config;
     config.frame_size = CAM_FRAMESIZE;
-    config.jpeg_quality = CAM_QUALITY; 
-    config.xclk_freq_hz = 16500000; //seems to increase stability compared to the full 20000000
+    config.jpeg_quality = CAM_QUALITY;
     cam.init(config);
 
-    //setup other camera options
     sensor_t * s = esp_camera_sensor_get();
+    #ifdef CONFIG_CAM_HORIZONTAL_MIRROR
+        s->set_hmirror(s, 1);
+    #endif
+    #ifdef CONFIG_CAM_VERTICAL_FLIP
+        s->set_vflip(s, 1);
+    #endif
+
+    //setup other camera options
     //s->set_brightness(s, 0);     // -2 to 2
     s->set_contrast(s, 1);       // -2 to 2
     //s->set_saturation(s, 0);     // -2 to 2
@@ -128,12 +149,6 @@ void rtsp_server(void)
     //s->set_wpc(s, 1);            // 0 = disable , 1 = enable
     //s->set_raw_gma(s, 1);        // 0 = disable , 1 = enable
     //s->set_lenc(s, 1);           // 0 = disable , 1 = enable
-    #ifdef CONFIG_CAM_HORIZONTAL_MIRROR
-        s->set_hmirror(s, 1);
-    #endif
-    #ifdef CONFIG_CAM_VERTICAL_FLIP
-        s->set_vflip(s, 1);
-    #endif
     //s->set_dcw(s, 1);            // 0 = disable , 1 = enable
     //s->set_colorbar(s, 0);       // 0 = disable , 1 = enable
 
@@ -159,16 +174,16 @@ void rtsp_server(void)
         printf("listen failed! errno=%d\n", errno);
     }
 
-    printf("\n\nrtsp://%s:8554/mjpeg/1\n\n", CONFIG_LWIP_LOCAL_HOSTNAME);
+    printf("\n\nrtsp://%s.localdomain:8554/mjpeg/1\n\n", CONFIG_LWIP_LOCAL_HOSTNAME);
 
     // loop forever to accept client connections
     while (true)
     {
-        printf("Minimum free heap size: %d bytes\n", esp_get_minimum_free_heap_size());
+        printf("Minimum free heap size: %lu bytes\n", esp_get_minimum_free_heap_size());
         client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_addr_len);
 
         printf("Client connected from: %s\n", inet_ntoa(client_addr.sin_addr));
-
+        esp_task_wdt_delete(NULL);
         xTaskCreate(client_worker, "client_worker", 3584, (void*)client_socket, tskIDLE_PRIORITY, &xHandle);
     }
 
@@ -191,6 +206,7 @@ void null_terminate_string(char * data, int data_len, char * normal_string, int 
 void simple_ota_update(char * url)
 {
     ESP_LOGI("OTA", "Starting OTA update...");
+    //TODO delete task watchdogs!
     esp_http_client_config_t http_config;
     memset(&http_config, 0, sizeof(http_config));
     http_config.url = url;
@@ -215,7 +231,7 @@ void simple_ota_update(char * url)
     printf("OTA complete with return code: %d\n", ret);
     snprintf(status, sizeof(status), "%d", ret);
     esp_mqtt_client_publish(mqtt_client, MQTT_OTA_STATUS_TOPIC, status, 0, 0, 0);
-    delay(5000);
+    delay(5000); //TODO this publish is not always reliable, not sure why
     esp_restart();
 }
 
@@ -294,12 +310,12 @@ void mqtt_app_start(void)
 {
     esp_mqtt_client_config_t mqtt_cfg;
     memset(&mqtt_cfg, 0, sizeof(esp_mqtt_client_config_t));
-    mqtt_cfg.uri = CONFIG_MQTT_URL;
-    mqtt_cfg.client_id = MQTT_CLIENT_NAME;
-    mqtt_cfg.lwt_topic = MQTT_WILL_TOPIC;
-    mqtt_cfg.lwt_msg = MQTT_WILL_MSG;
-    mqtt_cfg.lwt_qos = 1;
-    mqtt_cfg.lwt_retain = true;
+    mqtt_cfg.broker.address.uri = CONFIG_MQTT_URI;
+    mqtt_cfg.credentials.client_id = MQTT_CLIENT_NAME;
+    mqtt_cfg.session.last_will.topic = MQTT_WILL_TOPIC;
+    mqtt_cfg.session.last_will.msg = MQTT_WILL_MSG;
+    mqtt_cfg.session.last_will.qos = 1;
+    mqtt_cfg.session.last_will.retain = true;
 
     //setup camera LED
     ledc_timer_config_t ledc_timer =

@@ -34,10 +34,11 @@ camera_config_t esp32cam_config{
     // .frame_size = FRAMESIZE_XGA, // needs 96K or even smaller FRAMESIZE_SVGA - can work if using only 1 fb
     .frame_size = FRAMESIZE_SVGA,
     .jpeg_quality = 12, //0-63 lower numbers are higher quality
-    .fb_count = 2,      // if more than one i2s runs in continous mode.  Use only with jpeg
-    .fb_location = CAMERA_FB_IN_PSRAM,
+    .fb_count = 1,      // if more than one i2s runs in continous mode.  Use only with jpeg
 #ifndef ARDUINO_ARCH_ESP32
-    .grab_mode = CAMERA_GRAB_WHEN_EMPTY
+    .fb_location = CAMERA_FB_IN_PSRAM,
+    .grab_mode = CAMERA_GRAB_WHEN_EMPTY,
+    .sccb_i2c_port = -1
 #endif
 };
 
@@ -64,7 +65,7 @@ camera_config_t esp32cam_aithinker_config{
     .pin_vsync = 25,
     .pin_href = 23,
     .pin_pclk = 22,
-    .xclk_freq_hz = 20000000,
+    .xclk_freq_hz = 10000000, // lower is probably more stable, but 8MHz proved very unstable
     .ledc_timer = LEDC_TIMER_0,
     .ledc_channel = LEDC_CHANNEL_0,
     .pixel_format = PIXFORMAT_JPEG,
@@ -73,10 +74,11 @@ camera_config_t esp32cam_aithinker_config{
     // .frame_size = FRAMESIZE_XGA, // needs 96K or even smaller FRAMESIZE_SVGA - can work if using only 1 fb
     .frame_size = FRAMESIZE_VGA,
     .jpeg_quality = 12, //0-63 lower numbers are higher quality
-    .fb_count = 2,      // if more than one i2s runs in continous mode.  Use only with jpeg
-    .fb_location = CAMERA_FB_IN_PSRAM,
+    .fb_count = 1,      // if more than one i2s runs in continous mode.  Use only with jpeg
 #ifndef ARDUINO_ARCH_ESP32
-    .grab_mode = CAMERA_GRAB_WHEN_EMPTY
+    .fb_location = CAMERA_FB_IN_PSRAM,
+    .grab_mode = CAMERA_GRAB_WHEN_EMPTY,
+    .sccb_i2c_port = -1
 #endif
 };
 
@@ -107,10 +109,11 @@ camera_config_t esp32cam_ttgo_t_config{
     .pixel_format = PIXFORMAT_JPEG,
     .frame_size = FRAMESIZE_SVGA,
     .jpeg_quality = 12, //0-63 lower numbers are higher quality
-    .fb_count = 2,      // if more than one i2s runs in continous mode.  Use only with jpeg
-    .fb_location = CAMERA_FB_IN_PSRAM,
+    .fb_count = 1,      // if more than one i2s runs in continous mode.  Use only with jpeg
 #ifndef ARDUINO_ARCH_ESP32
-    .grab_mode = CAMERA_GRAB_WHEN_EMPTY
+    .fb_location = CAMERA_FB_IN_PSRAM,
+    .grab_mode = CAMERA_GRAB_WHEN_EMPTY,
+    .sccb_i2c_port = -1
 #endif
 };
 
@@ -219,13 +222,28 @@ esp_err_t OV2640::init(camera_config_t config)
     memset(&_cam_config, 0, sizeof(_cam_config));
     memcpy(&_cam_config, &config, sizeof(config));
 
+    //do a long powerdown of the camera, the esp32-camera code power downs for 10ms, which may not be enough
+    if (_cam_config.pin_pwdn >= 0)
+    {
+        gpio_config_t conf;
+        memset(&conf, 0, sizeof(gpio_config_t));
+        conf.pin_bit_mask = 1LL << _cam_config.pin_pwdn;
+        conf.mode = GPIO_MODE_OUTPUT;
+        gpio_config(&conf);
+
+        // this will take a full second, should not cause any watchdog issues
+        gpio_set_level((gpio_num_t)_cam_config.pin_pwdn, 1);
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+        gpio_set_level((gpio_num_t)_cam_config.pin_pwdn, 0);
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+    }
+
     esp_err_t err = esp_camera_init(&_cam_config);
     if (err != ESP_OK)
     {
         DEBUG_PRINT("Camera probe failed with error 0x%x", err);
         return err;
     }
-    // ESP_ERROR_CHECK(gpio_install_isr_service(0));
 
     return ESP_OK;
 }

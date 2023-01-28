@@ -7,7 +7,7 @@ This example uses the "simple_ota" example as the basis for the OTA functionalit
 This example also uses network configuration tweaks from the iperf example.
 This example supports multiple simultaneious TCP and UDP clients. All clients will use the same camera settings. Be aware that performance will be greatly reduced with multiple clients.
 
-This project has been tested with esp-idf version [4.3.1](https://github.com/espressif/esp-idf/releases/tag/v4.3.1).
+This project has been tested with esp-idf version [5.0](https://github.com/espressif/esp-idf/releases/v5.0-beta1).
 
 This project epends on the `esp32-camera` library which should be cloned into the `components` folder when this repo is cloned (it is included as a git submodule).
 
@@ -22,12 +22,19 @@ In the `Example Configuration` menu:
 * Set the Wi-Fi configuration.
     * Set `WiFi SSID`.
     * Set `WiFi Password`.
+    * Set Single Client Mode. When enabled, the system will reset if a client disconnects. This can help clear up connections and corrupted cameras, useful for DVR setups when only one client is ever connected.
+    * Set the MQTT connection [URI](https://iotbyhvm.ooo/using-uris-to-connect-to-a-mqtt-server/)
     * Set your desired framerate.
     * Set vertical and horizontal flipping of the image (depends on how the camera is mounted).
+    * Set the frame resolution.
 
 The hostname for the camera is located in the `Component config->LWIP->Local netif hostname`
-Additional configuration options for the camera (resolution, quality, whitebalance) can be found in `main/esp32cam.cpp`
-Configuration options for the MQTT client can be found in `main/esp32cam.cpp`
+Additional configuration options for the camera (quality, whitebalance) can be found in `main/esp32cam.cpp`
+
+### NOTE
+If you increase the framerate or resolution, you may need to increase `xclk_freq_hz` found in `../../src/OV2640.cpp` above the default 10MHz (20MHz is the maximum). Lower speeds improve stability but increases the frame transfer time from the camera. I've found that 5MHz will only give me 3fps, but 8MHz and below proved to be unstable for many of my cameras. Also, I have one camera that will not reliably work at 20MHz, but seems fine at 10MHz.
+Consider setting `fb_count` to 2 to increase framerate at the cost of stability. This is because when set to two, the esp32-camera code will start grabbing the next frame as soon as one has finished, so when this code grabs a frame it is immedaite and fresh. However, this leaves the esp32 constantly grabbing frames, which puts a lot of stress on the camera, PSRAM, and esp32.
+
 
 ### Build and Flash
 
