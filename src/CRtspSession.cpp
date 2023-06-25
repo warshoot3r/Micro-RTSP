@@ -32,8 +32,7 @@ CRtspSession::CRtspSession(SOCKET aRtspClient, CStreamer * aStreamer) : m_RtspCl
 
 CRtspSession::~CRtspSession()
 {
-    tcpsocketclose(m_RtspClient);
-
+    tcpclosesocket(m_RtspClient);
     delete[] RecvBuf;
     delete[] Response;
     delete[] SDPBuf;
